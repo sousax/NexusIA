@@ -45,7 +45,7 @@ O sistema opera de forma simples e direta através de uma interface web:
 4.  Coloque a base de dados com o nome que está no script.
 
 5.  Abra o terminal e digite: `pip install streamlit pandas pdfplumber openpyxl`
-6.  Ainda no terminal didite: `streamlist run _nome do arquivo_
+6.  Ainda no terminal didite: `streamlist run _nome do arquivo_`
 
 ---
 
