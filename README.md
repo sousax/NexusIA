@@ -38,12 +38,6 @@ O sistema opera de forma simples e direta através de uma interface web:
 ---
 ## 🚀 Como Replicar o Projeto
 
-* **Link para o Projeto no Wokwi:**
-    !`(https://wokwi.com/projects/434651680429040641)`
-
-* **Link para o Canal no ThingSpeak:**
-    !`(https://thingspeak.mathworks.com/channels/2996766)`
-
 **Instruções:**
 1.  Tenha Python 3.8 (ou superior) instalado.
 2.  Crie uma pasta para o projeto.
