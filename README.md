@@ -1,6 +1,6 @@
 # Projeto NexusAI: Agente de IA para análise de PN, NCM e descrição.
 
-![Flood Alert](https://img.shields.io/badge/AI-Agente%20de%IA-red)
+![Flood Alert](https://img.shields.io/badge/Inteligência%20Artificial-Agente%20de%20IA-red)
 ![Platform](https://img.shields.io/badge/Plataforma-VSCode-purple)
 ![Microcontroller](https://img.shields.io/badge/VS-Python-blue)
 
