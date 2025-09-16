@@ -3,15 +3,15 @@ import streamlit as st
 import pandas as pd
 import pdfplumber
 import re
-import time # Para medir o tempo de execução
+import time
 
-# --- Funções do Agente (Lógica Atualizada) ---
+# --- Funções do Agente (Lógica Atualizada e Mais Robusta) ---
 
-@st.cache_data # Cache para otimizar o carregamento
+@st.cache_data
 def carregar_base_dados(caminho_arquivo):
     """
     Carrega a base de dados do Excel e retorna o DataFrame completo
-    e um CONJUNTO (set) otimizado de Part Numbers para busca rápida.
+    e um DICIONÁRIO DE MAPEAMENTO para busca flexível.
     """
     try:
         df = pd.read_excel(caminho_arquivo)
@@ -20,10 +20,17 @@ def carregar_base_dados(caminho_arquivo):
             return None, None
 
         df['Código'] = df['Código'].astype(str)
-        # Criar um conjunto (set) de Códigos é CRUCIAL para a performance.
-        # Buscar um item em um set é milhares de vezes mais rápido do que em uma lista.
-        codigos_validos = set(df['Código'])
-        return df, codigos_validos
+        
+        # <<< MUDANÇA AQUI: CRIANDO O MAPA DE CÓDIGOS >>>
+        # Para cada código, criamos uma versão "normalizada" (sem -, /, .)
+        # O mapa associa a versão normalizada ao código original.
+        # Ex: {'70415202': '70415-202'}
+        codigo_map = {
+            re.sub(r'[-/.\s]', '', codigo): codigo 
+            for codigo in df['Código'].dropna().unique()
+        }
+        
+        return df, codigo_map
 
     except FileNotFoundError:
         st.error(f"Erro: O arquivo '{caminho_arquivo}' não foi encontrado.")
@@ -42,38 +49,46 @@ def extrair_texto_pdf(arquivo_pdf):
                 texto_completo += texto + "\n"
     return texto_completo
 
-def buscar_pns_por_comparacao_direta(texto_pdf, pns_validos_set):
+# <<< MUDANÇA AQUI: NOVA FUNÇÃO DE BUSCA FLEXÍVEL >>>
+def buscar_codigos_com_mapeamento(texto_pdf, codigo_map):
     """
-    Quebra o texto do PDF em palavras e verifica cada uma contra o conjunto
-    de Part Numbers válidos.
+    Busca códigos no texto do PDF de forma flexível, normalizando 
+    os dados antes de comparar com o mapa de códigos.
     """
-    # 1. Limpeza e Tokenização:
-    #    - Remove pontuações comuns que podem estar "coladas" nos Part Numbers.
-    #    - Divide o texto em "palavras" (tokens).
-    texto_limpo = re.sub(r'[(),:;!?"\'`]', ' ', texto_pdf) # Substitui pontuação por espaço
-    palavras_do_pdf = set(texto_limpo.split()) # Usa set para evitar verificar a mesma palavra várias vezes
+    # 1. Limpeza e extração de "palavras" do PDF
+    texto_limpo = re.sub(r'[(),:;!?"\'`]', ' ', texto_pdf)
+    palavras_do_pdf = set(texto_limpo.split())
 
-    # 2. Comparação:
-    #    - Encontra a interseção entre as palavras do PDF e os PNs válidos.
-    #    - É extremamente rápido por usar operações de conjunto (set).
-    pns_encontrados = palavras_do_pdf.intersection(pns_validos_set)
+    codigos_encontrados_originais = set()
 
-    return list(pns_encontrados)
+    # 2. Comparação Normalizada
+    for palavra in palavras_do_pdf:
+        # Normaliza a palavra do PDF (remove -, /, .)
+        palavra_normalizada = re.sub(r'[-/.\s]', '', palavra)
+        
+        # Procura a versão normalizada no nosso mapa
+        if palavra_normalizada in codigo_map:
+            # Se encontrar, adiciona o CÓDIGO ORIGINAL à nossa lista de resultados
+            codigo_original = codigo_map[palavra_normalizada]
+            codigos_encontrados_originais.add(codigo_original)
+
+    return list(codigos_encontrados_originais)
 
 
 # --- Interface Gráfica com Streamlit ---
 
-st.set_page_config(page_title="Agente de Busca Dinâmica", layout="wide")
-
-st.title("🤖 Agente de Busca Dinâmica de Part Numbers")
-st.markdown("Faça o upload de um PDF. O agente irá comparar as palavras do documento com sua base de dados.")
+st.set_page_config(page_title="Agente de Busca Flexível", layout="wide")
+st.title("🤖 Agente de Busca Dinâmica e Flexível")
+st.markdown("Faça o upload de um PDF. O agente irá encontrar os códigos, mesmo que o formato (com ou sem `-`) seja diferente da base de dados.")
 
 # 1. Carregar a base de dados
 NOME_ARQUIVO_BASE = "base_de_dados.xlsx"
-df_base, pns_validos = carregar_base_dados(NOME_ARQUIVO_BASE)
+# <<< MUDANÇA AQUI >>>
+df_base, mapa_de_codigos = carregar_base_dados(NOME_ARQUIVO_BASE)
 
-if df_base is not None:
-    st.success(f"Base de dados '{NOME_ARQUIVO_BASE}' carregada. {len(pns_validos)} Part Numbers únicos prontos para busca.")
+# <<< MUDANÇA AQUI >>>
+if df_base is not None and mapa_de_codigos:
+    st.success(f"Base de dados '{NOME_ARQUIVO_BASE}' carregada. {len(mapa_de_codigos)} códigos únicos prontos para busca.")
 
     # 2. Upload do arquivo PDF
     pdf_carregado = st.file_uploader("Selecione o arquivo PDF", type="pdf")
@@ -82,32 +97,26 @@ if df_base is not None:
         st.markdown("---")
         st.subheader("Resultados da Análise")
 
-        # Inicia a contagem de tempo
         start_time = time.time()
-
-        # Extrai o texto
         texto_do_pdf = extrair_texto_pdf(pdf_carregado)
 
         if texto_do_pdf:
-            # A nova função de busca!
-            pns_encontrados_lista = buscar_pns_por_comparacao_direta(texto_do_pdf, pns_validos)
+            # <<< MUDANÇA AQUI: Usando a nova função de busca >>>
+            codigos_encontrados_lista = buscar_codigos_com_mapeamento(texto_do_pdf, mapa_de_codigos)
 
-            if pns_encontrados_lista:
-                # Mostra os PNs encontrados
-                st.write(f"**{len(pns_encontrados_lista)}** Part Numbers correspondentes encontrados no PDF:")
-                st.info(", ".join(pns_encontrados_lista))
+            if codigos_encontrados_lista:
+                st.write(f"**{len(codigos_encontrados_lista)}** Códigos correspondentes encontrados no PDF:")
+                st.info(", ".join(codigos_encontrados_lista))
 
-                # Filtra o DataFrame original para mostrar os detalhes
                 st.markdown("---")
                 st.subheader("Itens encontrados na sua Base de Dados:")
-                resultados_finais = df_base[df_base['Código'].isin(pns_encontrados_lista)]
+                resultados_finais = df_base[df_base['Código'].isin(codigos_encontrados_lista)]
                 st.dataframe(resultados_finais, use_container_width=True)
 
             else:
-                st.warning("Nenhuma palavra no PDF correspondeu a um Part Number da sua base de dados.")
+                st.warning("Nenhum código no PDF correspondeu à sua base de dados.")
         else:
-            st.error("Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada.")
+            st.error("Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada ou estar em branco.")
 
-        # Mostra o tempo de execução
         end_time = time.time()
         st.caption(f"Análise concluída em {end_time - start_time:.2f} segundos.")
