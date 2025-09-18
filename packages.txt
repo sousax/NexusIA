@@ -1,0 +1,9 @@
+# Para Tesseract e pdf2image
+tesseract-ocr
+tesseract-ocr-por
+poppler-utils
+
+# Novas dependências para o OpenCV (cv2)
+ffmpeg
+libsm6
+libxext6
