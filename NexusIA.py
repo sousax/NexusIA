@@ -56,24 +56,59 @@ def preprocessar_imagem_para_ocr(imagem):
 
 # Na Célula 3 do seu código Colab ou no seu script Streamlit
 
+# Substitua a sua função antiga por esta versão mais segura
+
 def extrair_texto_pdf_hibrido(arquivo_pdf_bytes):
-    # ... (código anterior da função) ...
+    """
+    Extrai texto de um PDF usando uma abordagem híbrida e segura.
+    """
+    texto_completo = ""
+    
+    # 1. TENTATIVA RÁPIDA (PDF DIGITAL)
+    try:
+        with pdfplumber.open(arquivo_pdf_bytes) as pdf:
+            for pagina in pdf.pages:
+                texto_pagina = pagina.extract_text(x_tolerance=2)
+                # Garante que o texto da página não seja None antes de o juntar
+                if texto_pagina:
+                    texto_completo += texto_pagina + "\n"
+    except Exception:
+        # Se o pdfplumber falhar, garantimos que texto_completo continua a ser uma string vazia
+        texto_completo = ""
+
+    # <<< MUDANÇA AQUI: Adicionada verificação para 'None' >>>
+    # Esta verificação dupla impede o erro.
+    # 1º: Verifica se `texto_completo` não é None.
+    # 2º: Se não for, então verifica se não está em branco.
+    if texto_completo and texto_completo.strip():
+        st.info("PDF digital detectado. Extração rápida concluída.")
+        return texto_completo
 
     # 2. SE FALHAR, TENTATIVA LENTA (OCR EM PDF ESCANEADO)
     st.info("PDF sem texto detectado. Iniciando OCR com Tesseract...")
     
     texto_ocr = ""
     try:
-        # <<< MUDANÇA AQUI: Adicionar verificação de erro específica >>>
+        # É importante voltar ao início do ficheiro antes de o ler novamente
+        arquivo_pdf_bytes.seek(0)
         imagens_pdf = convert_from_bytes(arquivo_pdf_bytes.read())
+        
+        progress_bar = st.progress(0)
+        for i, imagem in enumerate(imagens_pdf):
+            st.write(f"Processando página {i+1}/{len(imagens_pdf)}...")
+            imagem_processada = preprocessar_imagem_para_ocr(imagem)
+            texto_ocr += pytesseract.image_to_string(imagem_processada, lang='por+eng') + "\n"
+            progress_bar.progress((i + 1) / len(imagens_pdf))
+            
+        st.success("Processamento OCR concluído!")
+        return texto_ocr
+        
     except Exception as e:
-        # Se a conversão para imagem falhar, é um sinal de PDF corrompido
         if "Unable to get page count" in str(e):
-            st.error("Erro: O arquivo PDF parece estar corrompido ou mal formatado. Por favor, tente a solução 'Imprimir para PDF' e faça o upload do novo arquivo.")
-            return "" # Retorna vazio para parar a execução
+            st.error("Erro: O ficheiro PDF parece estar corrompido. Por favor, tente a solução 'Imprimir para PDF' e envie o novo ficheiro.")
         else:
-            st.error(f"Ocorreu um erro ao converter o PDF para imagem: {e}")
-            return ""
+            st.error(f"Ocorreu um erro durante o processo de OCR: {e}")
+        return "" # Retorna sempre uma string vazia em caso de erro
 
     # ... (resto do código da função com a barra de progresso e o pytesseract) ...
     
@@ -178,4 +213,5 @@ if df_base is not None and mapa_de_codigos:
 
         end_time = time.time()
         st.caption(f"Análise concluída em {end_time - start_time:.2f} segundos.")
+
 
