@@ -1,4 +1,3 @@
-# Para Tesseract e pdf2image
 tesseract-ocr
 tesseract-ocr-por
 poppler-utils
