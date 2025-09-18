@@ -3,7 +3,8 @@ tesseract-ocr
 tesseract-ocr-por
 poppler-utils
 
-# Novas dependências para o OpenCV (cv2)
+# Dependências para o OpenCV (cv2)
 ffmpeg
 libsm6
 libxext6
+libgl1-mesa-glx
