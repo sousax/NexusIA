@@ -54,13 +54,28 @@ def preprocessar_imagem_para_ocr(imagem):
     
     return thresh
 
+# Na Célula 3 do seu código Colab ou no seu script Streamlit
+
 def extrair_texto_pdf_hibrido(arquivo_pdf_bytes):
-    """
-    Extrai texto de um PDF usando uma abordagem híbrida:
-    1. Tenta extrair texto digital (rápido).
-    2. Se falhar, usa OCR (Tesseract) com pré-processamento de imagem.
-    """
-    texto_completo = ""
+    # ... (código anterior da função) ...
+
+    # 2. SE FALHAR, TENTATIVA LENTA (OCR EM PDF ESCANEADO)
+    st.info("PDF sem texto detectado. Iniciando OCR com Tesseract...")
+    
+    texto_ocr = ""
+    try:
+        # <<< MUDANÇA AQUI: Adicionar verificação de erro específica >>>
+        imagens_pdf = convert_from_bytes(arquivo_pdf_bytes.read())
+    except Exception as e:
+        # Se a conversão para imagem falhar, é um sinal de PDF corrompido
+        if "Unable to get page count" in str(e):
+            st.error("Erro: O arquivo PDF parece estar corrompido ou mal formatado. Por favor, tente a solução 'Imprimir para PDF' e faça o upload do novo arquivo.")
+            return "" # Retorna vazio para parar a execução
+        else:
+            st.error(f"Ocorreu um erro ao converter o PDF para imagem: {e}")
+            return ""
+
+    # ... (resto do código da função com a barra de progresso e o pytesseract) ...
     
     # 1. TENTATIVA RÁPIDA (PDF DIGITAL)
     try:
@@ -163,3 +178,4 @@ if df_base is not None and mapa_de_codigos:
 
         end_time = time.time()
         st.caption(f"Análise concluída em {end_time - start_time:.2f} segundos.")
+
