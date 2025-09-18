@@ -4,4 +4,3 @@ pdfplumber
 openpyxl
 pytesseract 
 pdf2image
-convert_from_bytes
