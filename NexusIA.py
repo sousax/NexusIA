@@ -5,7 +5,13 @@ import pdfplumber
 import re
 import time
 
-# --- Funções do Agente (Lógica Atualizada e Mais Robusta) ---
+# Novas importações para OCR e processamento de imagem
+import pytesseract
+from pdf2image import convert_from_bytes
+import cv2
+import numpy as np
+
+# --- Funções de Pré-processamento e Extração de Texto ---
 
 @st.cache_data
 def carregar_base_dados(caminho_arquivo):
@@ -18,20 +24,12 @@ def carregar_base_dados(caminho_arquivo):
         if 'Código' not in df.columns:
             st.error("Erro: A coluna 'Código' não foi encontrada na base de dados.")
             return None, None
-
         df['Código'] = df['Código'].astype(str)
-        
-        # <<< MUDANÇA AQUI: CRIANDO O MAPA DE CÓDIGOS >>>
-        # Para cada código, criamos uma versão "normalizada" (sem -, /, .)
-        # O mapa associa a versão normalizada ao código original.
-        # Ex: {'70415202': '70415-202'}
         codigo_map = {
             re.sub(r'[-/.\s]', '', codigo): codigo 
             for codigo in df['Código'].dropna().unique()
         }
-        
         return df, codigo_map
-
     except FileNotFoundError:
         st.error(f"Erro: O arquivo '{caminho_arquivo}' não foi encontrado.")
         return None, None
@@ -39,36 +37,80 @@ def carregar_base_dados(caminho_arquivo):
         st.error(f"Ocorreu um erro ao ler o arquivo Excel: {e}")
         return None, None
 
-def extrair_texto_pdf(arquivo_pdf):
-    """Extrai todo o texto de um arquivo PDF."""
-    texto_completo = ""
-    with pdfplumber.open(arquivo_pdf) as pdf:
-        for pagina in pdf.pages:
-            texto = pagina.extract_text()
-            if texto:
-                texto_completo += texto + "\n"
-    return texto_completo
+def preprocessar_imagem_para_ocr(imagem):
+    """
+    Aplica técnicas de pré-processamento em uma imagem para melhorar a precisão do OCR.
+    """
+    # Converte a imagem para o formato que o OpenCV consegue usar
+    img_cv = np.array(imagem)
+    
+    # 1. Converter para escala de cinza
+    gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+    
+    # 2. Binarização (Thresholding) - Converte para preto e branco puro.
+    # Adaptive thresholding é excelente para documentos com iluminação não uniforme.
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                   cv2.THRESH_BINARY, 11, 2)
+    
+    return thresh
 
-# <<< MUDANÇA AQUI: NOVA FUNÇÃO DE BUSCA FLEXÍVEL >>>
+def extrair_texto_pdf_hibrido(arquivo_pdf_bytes):
+    """
+    Extrai texto de um PDF usando uma abordagem híbrida:
+    1. Tenta extrair texto digital (rápido).
+    2. Se falhar, usa OCR (Tesseract) com pré-processamento de imagem.
+    """
+    texto_completo = ""
+    
+    # 1. TENTATIVA RÁPIDA (PDF DIGITAL)
+    try:
+        with pdfplumber.open(arquivo_pdf_bytes) as pdf:
+            for pagina in pdf.pages:
+                texto_pagina = pagina.extract_text(x_tolerance=2) # Tolera pequenos desalinhamentos
+                if texto_pagina:
+                    texto_completo += texto_pagina + "\n"
+    except Exception:
+        texto_completo = "" # Ignora erros se não for um PDF válido para pdfplumber
+
+    # Se encontrou texto, retorna.
+    if texto_completo.strip():
+        st.info("PDF digital detectado. Extração rápida concluída.")
+        return texto_completo
+
+    # 2. SE FALHAR, TENTATIVA LENTA (OCR EM PDF ESCANEADO)
+    st.info("PDF sem texto detectado. Iniciando OCR com Tesseract...")
+    
+    texto_ocr = ""
+    try:
+        # Converte o PDF (em bytes) em uma lista de imagens
+        imagens_pdf = convert_from_bytes(arquivo_pdf_bytes.read())
+        
+        progress_bar = st.progress(0)
+        for i, imagem in enumerate(imagens_pdf):
+            st.write(f"Processando página {i+1}/{len(imagens_pdf)}...")
+            
+            # Aplica o pré-processamento na imagem
+            imagem_processada = preprocessar_imagem_para_ocr(imagem)
+            
+            # Extrai o texto da imagem limpa (especificando o idioma português)
+            texto_ocr += pytesseract.image_to_string(imagem_processada, lang='por+eng') + "\n"
+            progress_bar.progress((i + 1) / len(imagens_pdf))
+            
+        st.success("Processamento OCR concluído!")
+        return texto_ocr
+    except Exception as e:
+        st.error(f"Ocorreu um erro durante o processo de OCR: {e}")
+        return ""
+
 def buscar_codigos_com_mapeamento(texto_pdf, codigo_map):
-    """
-    Busca códigos no texto do PDF de forma flexível, normalizando 
-    os dados antes de comparar com o mapa de códigos.
-    """
-    # 1. Limpeza e extração de "palavras" do PDF
+    """Busca códigos no texto de forma flexível."""
     texto_limpo = re.sub(r'[(),:;!?"\'`]', ' ', texto_pdf)
     palavras_do_pdf = set(texto_limpo.split())
-
     codigos_encontrados_originais = set()
 
-    # 2. Comparação Normalizada
     for palavra in palavras_do_pdf:
-        # Normaliza a palavra do PDF (remove -, /, .)
         palavra_normalizada = re.sub(r'[-/.\s]', '', palavra)
-        
-        # Procura a versão normalizada no nosso mapa
         if palavra_normalizada in codigo_map:
-            # Se encontrar, adiciona o CÓDIGO ORIGINAL à nossa lista de resultados
             codigo_original = codigo_map[palavra_normalizada]
             codigos_encontrados_originais.add(codigo_original)
 
@@ -77,16 +119,14 @@ def buscar_codigos_com_mapeamento(texto_pdf, codigo_map):
 
 # --- Interface Gráfica com Streamlit ---
 
-st.set_page_config(page_title="Agente de Busca Flexível", layout="wide")
-st.title("🤖 Agente de Busca Dinâmica e Flexível")
-st.markdown("Faça o upload de um PDF. O agente irá encontrar os códigos, mesmo que o formato (com ou sem `-`) seja diferente da base de dados.")
+st.set_page_config(page_title="NexusAI OCR", layout="wide")
+st.title("🤖 NexusAI: Agente com OCR e Análise de Imagem")
+st.markdown("Faça o upload de um PDF **digital ou escaneado**. O agente irá analisar, melhorar a imagem (se necessário) e encontrar os códigos.")
 
 # 1. Carregar a base de dados
 NOME_ARQUIVO_BASE = "base_de_dados.xlsx"
-# <<< MUDANÇA AQUI >>>
 df_base, mapa_de_codigos = carregar_base_dados(NOME_ARQUIVO_BASE)
 
-# <<< MUDANÇA AQUI >>>
 if df_base is not None and mapa_de_codigos:
     st.success(f"Base de dados '{NOME_ARQUIVO_BASE}' carregada. {len(mapa_de_codigos)} códigos únicos prontos para busca.")
 
@@ -98,10 +138,11 @@ if df_base is not None and mapa_de_codigos:
         st.subheader("Resultados da Análise")
 
         start_time = time.time()
-        texto_do_pdf = extrair_texto_pdf(pdf_carregado)
+        
+        # <<< MUDANÇA PRINCIPAL AQUI >>>
+        texto_do_pdf = extrair_texto_pdf_hibrido(pdf_carregado)
 
-        if texto_do_pdf:
-            # <<< MUDANÇA AQUI: Usando a nova função de busca >>>
+        if texto_do_pdf.strip():
             codigos_encontrados_lista = buscar_codigos_com_mapeamento(texto_do_pdf, mapa_de_codigos)
 
             if codigos_encontrados_lista:
@@ -112,11 +153,13 @@ if df_base is not None and mapa_de_codigos:
                 st.subheader("Itens encontrados na sua Base de Dados:")
                 resultados_finais = df_base[df_base['Código'].isin(codigos_encontrados_lista)]
                 st.dataframe(resultados_finais, use_container_width=True)
-
             else:
                 st.warning("Nenhum código no PDF correspondeu à sua base de dados.")
+                # Opcional: Mostrar o texto extraído para depuração
+                with st.expander("Ver texto extraído pelo OCR"):
+                    st.text_area("Texto", texto_do_pdf, height=300)
         else:
-            st.error("Não foi possível extrair texto do PDF. O arquivo pode ser uma imagem escaneada ou estar em branco.")
+            st.error("Não foi possível extrair nenhum texto do PDF.")
 
         end_time = time.time()
         st.caption(f"Análise concluída em {end_time - start_time:.2f} segundos.")
