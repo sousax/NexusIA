@@ -1,60 +1,43 @@
-# Projeto NexusAI: Agente de IA para análise de PN, NCM e descrição.
+# NexusAI
 
-![Flood Alert](https://img.shields.io/badge/Inteligência%20Artificial-Agente%20de%20IA-red)
-![Platform](https://img.shields.io/badge/Plataforma-VSCode-purple)
-![Microcontroller](https://img.shields.io/badge/VS-Python-blue)
+Agente para conferência de Part Number × NCM × descrição em documentos logísticos: lê um PDF, encontra os Part Numbers que existem na base da empresa (Excel) e mostra NCM, descrição e demais colunas de cada um.
 
-## 📖 Descrição do Projeto
+No ar em **https://nexusaidsv.streamlit.app/**
 
-O NexusAI é um agente de inteligência artificial projetado para otimizar e automatizar processos de conferência em sistemas logísticos. A ferramenta analisa documentos em formato PDF, identifica dinamicamente os Part Numbers (PNs) presentes no texto e os valida contra uma base de dados (Excel), retornando as informações correspondentes como NCM e Descrição.
+## Contexto
 
----
+Conferir manualmente os Part Numbers de documentos como Declarações de Importação (DIs) é lento, repetitivo e sujeito a erro, o que pode gerar atrasos e problemas fiscais. O NexusAI automatiza essa conferência cruzando o documento com a base de dados.
 
-## 🎯 Contexto do Problema
+## Funcionalidades
 
-A identificação e conferência manual de Part Numbers em documentos, como Declarações de Importação (DIs), é um processo lento, repetitivo e sujeito a erros humanos. Esses erros podem causar atrasos e problemas fiscais. O NexusAI foi criado para mitigar esse problema, oferecendo uma solução automatizada que integra a análise de documentos com a base de dados da empresa, garantindo agilidade e precisão.
+- **Upload de PDF digital ou escaneado**: PDFs com texto são lidos direto (pdfplumber); sem texto, cada página passa por pré-processamento de imagem (escala de cinza + binarização adaptativa com OpenCV) e OCR com Tesseract (`por+eng`).
+- **Busca tolerante a formatação**: hífens, barras, pontos e espaços são ignorados na comparação, então `ABC-123.4` no PDF casa com `ABC1234` na base.
+- **Tabela de resultados** com todas as linhas da base para os códigos encontrados.
+- **Pesquisa manual por Part Number**: busca exata e, se não achar, busca aproximada (por trecho do código).
+- Sem correspondência, mostra o texto extraído para conferência.
 
----
+## Tecnologias
 
-## 🛠️ Tecnologias Utilizadas
+- Python 3.11, Streamlit
+- pandas + openpyxl (base Excel)
+- pdfplumber (PDF com texto)
+- pytesseract, pdf2image, OpenCV (OCR)
 
-* **Linguagem**: Python
-* **Interface Web:** Streamlit (temporário)
-* **Manipulação de Dados:** Pandas
-* **Extração de Dados:** PDFPlumber
-* **Leitura do Excel:** Openpyxl 
+## Como rodar
 
----
+A base de dados não está no repositório. Coloque na raiz um `base_de_dados.xlsx` com uma coluna `Código` (as demais colunas, como NCM e descrição, aparecem no resultado).
 
-## ⚙️ Explicação de Funcionamento
+```bash
+# binários do sistema (lista em packages.txt) — Ubuntu/Debian
+sudo apt-get install tesseract-ocr tesseract-ocr-por poppler-utils
 
-O sistema opera de forma simples e direta através de uma interface web:
-1. Carregamento da Base de Dados: Ao iniciar, o agente carrega a planilha Excel (base_de_dados.xlsx) e cria um conjunto otimizado de todos os Part Numbers válidos. Isso garante que as buscas futuras sejam quase instantâneas.
-2. Upload do Documento: O usuário acessa a interface web e faz o upload do arquivo PDF que precisa ser analisado.
-3. Extração de Texto: O sistema lê o PDF página por página e extrai todo o conteúdo textual.
-4. Busca Dinâmica por Comparação: O agente processa o texto extraído, dividindo-o em palavras individuais. Em seguida, compara cada palavra do documento com a lista de Part Numbers válidos carregada no início.
-5. Apresentação dos Resultados: Todos os Part Numbers encontrados no PDF que têm uma correspondência na base de dados são exibidos em uma tabela, juntamente com suas respectivas informações (NCM, Descrição, etc.).
+pip install -r requirements.txt
+streamlit run NexusIA.py   # http://localhost:8501
+```
 
----
-## 🚀 Como Replicar o Projeto
+O repositório também tem um `.devcontainer` que instala tudo e sobe o app no GitHub Codespaces.
 
-**Instruções:**
-1.  Tenha Python 3.8 (ou superior) instalado.
-2.  Crie uma pasta para o projeto.
-3.  Coloque o arquivo de script Python.
-4.  Coloque a base de dados com o nome que está no script.
+## Melhorias futuras
 
-5.  Abra o terminal e digite: `pip install streamlit pandas pdfplumber openpyxl`
-6.  Ainda no terminal didite: `streamlist run _nome do arquivo_`
-
----
-
-## 💡 Melhorias Futuras (Não implementadas)
-Este projeto pode ser expandido com as seguintes funcionalidades em uma versão física:
-* Suporte a OCR: Integrar uma biblioteca como Pytesseract para permitir a análise de PDFs escaneados (baseados em imagem).
-* Suporte a Novos Formatos: Adicionar a capacidade de analisar outros tipos de arquivos, como .docx, .csv e .txt.
-* Migração para Banco de Dados: Para bases de dados muito grandes, migrar do Excel para um sistema de banco de dados mais robusto como SQLite ou PostgreSQL para melhorar a performance.
-
-Feito por:
-
-Eduardo Sousa.
+- Suporte a outros formatos (.docx, .csv, .txt).
+- Migrar a base do Excel para SQLite ou PostgreSQL em bases muito grandes.
